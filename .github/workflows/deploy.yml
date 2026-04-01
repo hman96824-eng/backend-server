@@ -9,18 +9,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # Updated from v3
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4 # Updated from v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-south-1 # This matches your Mumbai region
+          aws-region: ap-south-1 
 
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2 # Updated from v1
 
       - name: Build, tag, and push image to Amazon ECR
         env:
@@ -28,7 +28,9 @@ jobs:
           REPO: ${{ secrets.ECR_REPOSITORY }}
           IMAGE_TAG: latest
         run: |
+          # Build the docker image
           docker build -t $ECR_REGISTRY/$REPO:$IMAGE_TAG .
+          # Push it to your ECR repo: zee-server
           docker push $ECR_REGISTRY/$REPO:$IMAGE_TAG
 
       - name: Deploy to EC2 via SSH
@@ -38,16 +40,16 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Login to ECR on EC2
+            # 1. Login to ECR inside the EC2
             aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
             
-            # Stop old container if it exists
+            # 2. Stop and remove the old container if it exists
             docker stop zee-container || true
             docker rm zee-container || true
             
-            # Pull the fresh image
+            # 3. Pull the fresh image we just pushed
             docker pull ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest
             
-            # Run the new container
+            # 4. Run the new container (Mapping port 5000)
             docker run -d -p 5000:5000 --name zee-container \
             ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest
